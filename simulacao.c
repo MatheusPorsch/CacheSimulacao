@@ -84,9 +84,10 @@ int get_politica_de_escrita(){
 
     printf("Politica de Escrita: 0-Write Through 1-Write Back\n");
     scanf("%d", &politica_de_escrita);
+    
     if(politica_de_escrita != 0 && politica_de_escrita != 1){
         printf("Erro: Politica de Escrita Deve ser 0 ou 1");
-        exit(3);
+        exit(2);
     }
 
     return politica_de_escrita;
@@ -98,9 +99,10 @@ int get_tamanho_da_linha(){
 
     printf("Tamanho da Linha (Multiplo de 2)\n");
     scanf("%d", &tamanho_da_linha);
+    
     if (tamanho_da_linha <= 0 || (tamanho_da_linha & (tamanho_da_linha - 1)) != 0){
-        printf("Erro: Tamanho da Linha Nao esta na base 2");
-        exit(4);
+        printf("Erro: Tamanho da Linha Nao esta na base 2!");
+        exit(3);
     }
 
     return tamanho_da_linha;
@@ -112,9 +114,10 @@ int get_numero_de_linhas(){
 
     printf("Quantidade de Linhas (Multiplo de 2)\n");
     scanf("%d", &numero_de_linhas);
+    
     if (numero_de_linhas <= 0 || (numero_de_linhas & (numero_de_linhas - 1)) != 0){
-        printf("Erro: Numero de Linhas Nao esta na base 2");
-        exit(5);
+        printf("Erro: Numero de Linhas Nao esta na base 2!");
+        exit(4);
     }
 
     return numero_de_linhas;
@@ -126,9 +129,10 @@ int get_associatividade(int numero_de_linhas){
 
     printf("Associatividade:\n");
     scanf("%d", &associatividade);
-    if(associatividade > numero_de_linhas){
-        printf("Erro: Numero de Conjuntos Maior que o de Linhas");
-        exit(7);
+
+    if(associatividade <= 0 || (associatividade & (associatividade - 1)) != 0 || associatividade > numero_de_linhas){
+        printf("Erro: Numero de Conjuntos Maior que o de Linhas!");
+        exit(5);
     }
 
     return associatividade;
@@ -141,6 +145,11 @@ int get_hit_time(){
     printf("Tempo de Acerto (Hit Time) em ns \n");
     scanf("%d", &hit_time);
     
+    if(hit_time < 0){
+        printf("Erro: Hit Time Não Pode ser Menor que Zero!");
+        exit(6);
+    }
+    
     return hit_time;
 }
 
@@ -150,9 +159,10 @@ int get_politica_de_substituicao(){
 
     printf("Politica de Substituicao (0-LRU 1-Aleatorio) \n");
     scanf("%d", &politica_de_substituicao);
+    
     if(politica_de_substituicao != 0 && politica_de_substituicao != 1){
-        printf("Erro: Politica de Substituicao Deve ser 0 (LRU) ou 1 (Aleatorio)");
-        exit(8);
+        printf("Erro: Politica de Substituicao Deve ser 0 (LRU) ou 1 (Aleatorio)!");
+        exit(7);
     }
 
     return politica_de_substituicao;
@@ -164,6 +174,11 @@ int get_tempo_de_leitura_e_escrita(){
 
     printf("Tempo de Leitura e Escrita na Memoria Principal em ns \n");
     scanf("%d", &tempo_de_leitura_e_escrita);
+    
+    if(tempo_de_leitura_e_escrita < 0){
+        printf("Erro: Tempo de Acesso à Principal Não Pode ser Menor que Zero!");
+        exit(8);
+    }
 
     return tempo_de_leitura_e_escrita;
 }
@@ -173,7 +188,7 @@ int procurar_na_cache(Cache *cache, unsigned int endereco, int write_back){
     
     int tag, index, i, j, encontrado, linha_selecionada, ultimo_lru;
     tag = endereco >> (cache->index_base2 + cache->offset_base2);
-    index = (endereco >> cache->offset_base2) & (( 1 << cache->index_base2) - 1 );
+    index = (endereco >> cache->offset_base2) & (( 1 << cache->index_base2) - 1);
     
     encontrado = 0;
     for(j=0; j<(cache->associatividade); j++){
@@ -188,45 +203,41 @@ int procurar_na_cache(Cache *cache, unsigned int endereco, int write_back){
         }
     }
     
-    if(encontrado){
-        if(cache->politica_de_substituicao == 0)
-            for(i=0; i<(cache->associatividade); i++)
-                if(i != linha_selecionada)
-                    cache->conjuntos[index].linha[i].lru++;
+    //LRU de HIT
+    if(encontrado && cache->politica_de_substituicao == 0){
+        for(i=0; i<(cache->associatividade); i++)
+            if(i != linha_selecionada && cache->conjuntos[index].linha[i].lru < cache->conjuntos[index].linha[linha_selecionada].lru)
+                cache->conjuntos[index].linha[i].lru++;
         cache->conjuntos[index].linha[linha_selecionada].lru = 0;
     }
-    
+
     return encontrado;
 }
 
-// Remoção por Menos Recente Utilização
+// Miss de Cache: Remoção por Menos Recente Utilização
 void cache_lru(Cache *cache, int dirty, int tag, int index, double *acesso_principal_escrita){
     
     int linha_selecionada, valor_mais_antigo = -1, linha_menos_recentemente_utilizada = -1, maior_lru = cache->associatividade;
     
-    for(int i=0; i<cache->associatividade; i++){
+    for(int i=0; i<cache->associatividade; i++)
         if(cache->conjuntos[index].linha[i].valid == 0){
             linha_menos_recentemente_utilizada = i;
             break;
         }
-    }
         
     if(linha_menos_recentemente_utilizada == -1){
-        for(int i=0; i<cache->associatividade; i++){
+        for(int i=0; i<cache->associatividade; i++)
             if(cache->conjuntos[index].linha[i].lru > valor_mais_antigo){
                 valor_mais_antigo = cache->conjuntos[index].linha[i].lru;
                 linha_menos_recentemente_utilizada = i;
             }
-        }
         maior_lru = cache->conjuntos[index].linha[linha_menos_recentemente_utilizada].lru;
     }
     
-    
-    for(int i=0; i<cache->associatividade; i++){
-        if(i != linha_menos_recentemente_utilizada && cache->conjuntos[index].linha[i].valid == 1 && maior_lru > cache->conjuntos[index].linha[i].lru)
+    for(int i=0; i<cache->associatividade; i++)
+        if(i != linha_menos_recentemente_utilizada && cache->conjuntos[index].linha[i].valid == 1)
             cache->conjuntos[index].linha[i].lru++;
-    }
-    
+
     if(cache->conjuntos[index].linha[linha_menos_recentemente_utilizada].dirty == 1 && cache->conjuntos[index].linha[linha_menos_recentemente_utilizada].valid == 1)
         (*acesso_principal_escrita)++;
         
@@ -234,10 +245,9 @@ void cache_lru(Cache *cache, int dirty, int tag, int index, double *acesso_princ
     cache->conjuntos[index].linha[linha_menos_recentemente_utilizada].tag = tag;
     cache->conjuntos[index].linha[linha_menos_recentemente_utilizada].lru = 0;
     cache->conjuntos[index].linha[linha_menos_recentemente_utilizada].valid = 1;
-
 }
 
-// Remoção Aleatória
+// Miss de Cache: Remoção Aleatória
 void cache_random(Cache *cache, int dirty, int tag, int index, double *acesso_principal_escrita){
         
     int linha_aleatoria = -1;
@@ -252,22 +262,21 @@ void cache_random(Cache *cache, int dirty, int tag, int index, double *acesso_pr
         
     if(cache->conjuntos[index].linha[linha_aleatoria].dirty == 1)
         (*acesso_principal_escrita)++;
+        
     cache->conjuntos[index].linha[linha_aleatoria].dirty = dirty;
     cache->conjuntos[index].linha[linha_aleatoria].tag = tag;
     cache->conjuntos[index].linha[linha_aleatoria].lru = 0;
-    cache->conjuntos[index].linha[linha_aleatoria].valid = 1; ////
+    cache->conjuntos[index].linha[linha_aleatoria].valid = 1;
 }
 
 // Leitura
 void leitura(Cache *cache, unsigned int endereco, double *hit_cache_leitura, double *acesso_principal_leitura, double *acesso_principal_escrita){
     
-    int encontrado = procurar_na_cache(cache, endereco, 0), linha_aleatoria, tag, index;
+    int encontrado = procurar_na_cache(cache, endereco, 0), tag, index;
     
     if(encontrado == 1){
-        printf("HIT LEITURA\n");
         (*hit_cache_leitura)++;
     } else {
-        printf("MISS LEITURA\n");;
         (*acesso_principal_leitura)++;
         tag = endereco >> (cache->index_base2 + cache->offset_base2);
         index = (endereco >> cache->offset_base2) & (( 1 << cache->index_base2) - 1 );
@@ -276,21 +285,13 @@ void leitura(Cache *cache, unsigned int endereco, double *hit_cache_leitura, dou
         else 
             cache_random(cache, 0, tag, index, acesso_principal_escrita);
     }
-    
-    for(int i=0; i<cache->numero_de_conjuntos; i++)
-        for(int j=0; j<cache->associatividade; j++)
-            printf("%d: %d %d\n", j, cache->conjuntos[i].linha[j].tag, cache->conjuntos[i].linha[j].lru);
-    
-    
 }
 
 // Escrita Write Back
 void escrita_writeback(Cache *cache, unsigned int endereco, double *hit_cache_escrita, double *acesso_principal_leitura, double *acesso_principal_escrita){
 
-    int encontrado = procurar_na_cache(cache, endereco, 1), tag, index, linha_aleatoria;
+    int encontrado = procurar_na_cache(cache, endereco, 1), tag, index;
 
-    // printf("Encontrado: %d\n", encontrado);
-    
     if(encontrado == 1)
         (*hit_cache_escrita)++;
     else {
@@ -310,10 +311,9 @@ void escrita_writethrough(Cache *cache, unsigned int endereco, double *hit_cache
     int encontrado = procurar_na_cache(cache, endereco, 0);
 
     if(encontrado == 1)
-    
         (*hit_cache_escrita)++;
+        
     (*acesso_principal_escrita)++;
-
 }
 
 // Mostrar Todos os Parâmetros da Simulação
@@ -328,7 +328,6 @@ void mostrar_parametros(Cache *cache, int tempo_de_leitura_e_escrita){
     printf("%d Byte(s) por Linha\n", cache->tamanho_da_linha);
     printf("%d Linha(s) no Total\n", cache->numero_de_linhas);
         
-        printf("TC %d\n", tamanho_cache);
     if(tamanho_cache < 10)
         printf("Tamanho da Cache: %d B\n", 1 << (tamanho_cache%10));
     else{
@@ -361,13 +360,11 @@ void mostrar_parametros(Cache *cache, int tempo_de_leitura_e_escrita){
     printf("%d ns de Hit Time\n", cache->hit_time);
     printf("%d ns de Leitura/Escrita na Memória Principal\n", tempo_de_leitura_e_escrita);
     printf("--------------------------------------------------------------------\n");
-
 }
 
 // Calcular e Mostrar as Taxas de Acerto por Operação e Geral
 double mostrar_taxas_de_acerto(double hit_cache_leitura, int quantidade_leituras, double hit_cache_escrita, int quantidade_escritas){
-    
-    int calculo;
+
     if(quantidade_leituras != 0)
         printf("Hit Rate de Leituras: %.4f - %.0f Hits para %d Tentativas\n", hit_cache_leitura/quantidade_leituras, hit_cache_leitura, quantidade_leituras);
     if(quantidade_escritas != 0)
@@ -388,18 +385,14 @@ int main(){
     unsigned int endereco;
     double hit_rate, hit_cache_leitura = 0, hit_cache_escrita = 0, acesso_principal_leitura = 0, acesso_principal_escrita = 0;
     char acao, nome_arquivo[20];
-    
-    srand(time(NULL)), arquivo[20];
+    srand(time(NULL));
     
     // Abertura do Arquivo
-    
     get_arquivo(nome_arquivo);
-    
     arquivo = fopen(nome_arquivo, "r");
-    
     if(arquivo == NULL){
-        printf("Erro na Abertura do Arquivo \n");
-        exit(2);
+        printf("Erro na Abertura do Arquivo!\n");
+        exit(1);
     }
     
     // Capturar Parâmetros da Simulação
@@ -417,29 +410,35 @@ int main(){
 
     // Analisar Cada Linha do Arquivo
     while(fscanf(arquivo, "%x %c", &endereco, &acao) != EOF){
-
+        
         // Checar Se é Leitura ou Escrita
         if(acao == 'R'){
+            
             // Ler na Cache e Incrementar Quantidade de Leituras
-            leitura(cache, endereco, &hit_cache_leitura, &acesso_principal_leitura, &acesso_principal_escrita); /// Checar
-            // Incrmentar Quantidade de Leituras
+            leitura(cache, endereco, &hit_cache_leitura, &acesso_principal_leitura, &acesso_principal_escrita);
+            
+            // Incrementar Quantidade de Leituras
             quantidade_leituras++;
         }
         else 
             if(acao == 'W'){
+                
                 // Checar Política de Escrita
                 if(politica_de_escrita == 0)
+                
                     // Escrever com Write Through + No Write Allocate
-                    escrita_writethrough(cache, endereco, &hit_cache_escrita, &acesso_principal_escrita); /// Checar
+                    escrita_writethrough(cache, endereco, &hit_cache_escrita, &acesso_principal_escrita);
                 else
+                
                     // Escrever com Write Back + Write Allocate
-                    escrita_writeback(cache, endereco, &hit_cache_escrita, &acesso_principal_leitura, &acesso_principal_escrita); /// Checar
+                    escrita_writeback(cache, endereco, &hit_cache_escrita, &acesso_principal_leitura, &acesso_principal_escrita);
+                    
                 // Incrementar Quantidade de Escritas
                 quantidade_escritas++;
             }
             else {
                 printf("Erro de endereçamento");
-                exit(10);
+                exit(9);
             }
     }
     
@@ -447,7 +446,6 @@ int main(){
     for(int i=0; i<cache->numero_de_conjuntos; i++){
         for(int j=0; j<cache->associatividade; j++){
             if(cache->conjuntos[i].linha[j].dirty == 1 && cache->conjuntos[i].linha[j].valid == 1){
-                printf("Dirty encontrado na análise!\n");
                 acesso_principal_escrita++;
             }
         }
@@ -476,15 +474,11 @@ int main(){
     // Fechar Arquivo
     fclose(arquivo);
     
+    // Liberar a Memória Alocada
     for(int i=0; i<cache->numero_de_conjuntos; i++)
         free(cache->conjuntos[i].linha);
-    
     free(cache->conjuntos);
     free(cache);
     
     return 0;
 }
-
-
-
-
